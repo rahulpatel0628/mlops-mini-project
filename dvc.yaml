@@ -42,3 +42,9 @@ stages:
     - src/model/model_evaluation.py
     outs:
     - reports/metrics.json
+  register_model:
+    cmd: python src/model/register_model.py
+    deps:
+    - models/model.pkl
+    - src/model/register_model.py
+    - reports/run_id.txt

@@ -1,4 +1,4 @@
 [core]
     remote = myremote
 ['remote "myremote"']
-    url = C:\Users\hp\AppData\Local\Temp
+    url = ../arn:aws:s3:::emotiondetectionbucketdvcpipeline
