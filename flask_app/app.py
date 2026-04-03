@@ -2,8 +2,9 @@ from flask import Flask,render_template,request
 import mlflow
 import dagshub
 from mlflow.tracking import MlflowClient
-from preprocessing_utility import normalize_text
+from flask_app.preprocessing_utility import normalize_text
 import pickle
+
 app=Flask(__name__)
 
 # load vectorizer
