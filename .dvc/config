@@ -1,4 +1,4 @@
 [core]
     remote = myremote
 ['remote "myremote"']
-    url = ../arn:aws:s3:::emotiondetectionbucketdvcpipeline
+    url =s3://emotiondetectionbucketdvcpipeline

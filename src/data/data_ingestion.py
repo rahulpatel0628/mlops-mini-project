@@ -28,7 +28,7 @@ def load_data(url: str) -> pd.DataFrame:
     except Exception as e:
         logging.error(f"Error loading data: {e}")
         raise
-
+    
 
 def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
     try:
@@ -92,6 +92,7 @@ def main():
 
     except Exception as e:
         logging.error(f"Pipeline failed: {e}")
+        
 
 if __name__ == "__main__":
     main()

@@ -40,8 +40,7 @@ stages:
     deps:
     - data/features
     - src/model/model_evaluation.py
-    outs:
-    - reports/metrics.json
+    
   register_model:
     cmd: python src/model/register_model.py
     deps:

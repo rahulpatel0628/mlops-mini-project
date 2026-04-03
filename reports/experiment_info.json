@@ -1,4 +1,5 @@
 {
-    "run_id": "ebb14492b8ad4803affdbb24cffb63d3",
-    "model_path": "model"
+    "run_id": "ef10c0e7918947cfb82e854ed43dcff3",
+    "artifact_path": "mlflow-artifacts:/bcd0e00a313a4f049e185dd2fd1eb82c/ef10c0e7918947cfb82e854ed43dcff3/artifacts",
+    "model_name": "model"
 }

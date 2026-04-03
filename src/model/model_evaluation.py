@@ -1,147 +1,205 @@
-
-import numpy as np
 import pandas as pd
-import pickle
-import json
-from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score
+import joblib
 import logging
 import mlflow
 import mlflow.sklearn
 import dagshub
+from pathlib import Path
+from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score
+import json
 import os
 
-dagshub.init(repo_owner='rahulpatel16092005', repo_name='mlops-mini-project', mlflow=True)
-mlflow.set_tracking_uri("https://dagshub.com/rahulpatel16092005/mlops-mini-project.mlflow")
+TARGET = "sentiment"   # change if needed
 
-# logging configuration
-logger = logging.getLogger('model_evaluation')
-logger.setLevel('DEBUG')
+# Logging setup
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
-console_handler = logging.StreamHandler()
-console_handler.setLevel('DEBUG')
+logger = logging.getLogger(__name__)
 
-file_handler = logging.FileHandler('model_evaluation_errors.log')
-file_handler.setLevel('ERROR')
 
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-file_handler.setFormatter(formatter)
-
-logger.addHandler(console_handler)
-logger.addHandler(file_handler)
-
-def load_model(file_path: str):
-    """Load the trained model from a file."""
+# -------------------- MLflow Setup --------------------
+def setup_mlflow():
     try:
-        with open(file_path, 'rb') as file:
-            model = pickle.load(file)
-        logger.debug('Model loaded from %s', file_path)
-        return model
-    except FileNotFoundError:
-        logger.error('File not found: %s', file_path)
-        raise
+        dagshub.init(
+            repo_owner='rahulpatel16092005',
+            repo_name='mlops-mini-project',
+            mlflow=True
+        )
+
+        mlflow.set_tracking_uri(
+            "https://dagshub.com/rahulpatel16092005/mlops-mini-project.mlflow"
+        )
+
+        mlflow.set_experiment("DVC Pipeline Classification")
+        logger.info("MLflow setup completed")
+
     except Exception as e:
-        logger.error('Unexpected error occurred while loading the model: %s', e)
+        logger.error(f"MLflow setup failed: {e}")
         raise
 
-def load_data(file_path: str) -> pd.DataFrame:
-    """Load data from a CSV file."""
+
+# -------------------- Load Data --------------------
+def load_data(path: Path) -> pd.DataFrame:
     try:
-        df = pd.read_csv(file_path)
-        logger.debug('Data loaded from %s', file_path)
+        df = pd.read_csv(path)
+        logger.info(f"Data loaded from {path}")
         return df
-    except pd.errors.ParserError as e:
-        logger.error('Failed to parse the CSV file: %s', e)
-        raise
     except Exception as e:
-        logger.error('Unexpected error occurred while loading the data: %s', e)
+        logger.error(f"Error loading data: {e}")
         raise
 
-def evaluate_model(clf, X_test: np.ndarray, y_test: np.ndarray) -> dict:
-    """Evaluate the model and return the evaluation metrics."""
+
+# -------------------- Split Data --------------------
+def split_X_y(df: pd.DataFrame):
     try:
-        y_pred = clf.predict(X_test)
-        y_pred_proba = clf.predict_proba(X_test)[:, 1]
+        X = df.iloc[:, :-1]
+        y = df.iloc[:, -1]
+        return X, y
+    except Exception as e:
+        logger.error(f"Error splitting data: {e}")
+        raise
 
-        accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred)
-        recall = recall_score(y_test, y_pred)
-        auc = roc_auc_score(y_test, y_pred_proba)
 
-        metrics_dict = {
-            'accuracy': accuracy,
-            'precision': precision,
-            'recall': recall,
-            'auc': auc
+# -------------------- Load Model --------------------
+def load_model(path: Path):
+    try:
+        model = joblib.load(path)
+        logger.info("Model loaded successfully")
+        return model
+    except Exception as e:
+        logger.error(f"Error loading model: {e}")
+        raise
+
+
+# -------------------- Evaluate Model --------------------
+def evaluate_model(model, X_test, y_test):
+    try:
+        y_pred = model.predict(X_test)
+        y_pred_proba = model.predict_proba(X_test)[:, 1]
+
+        metrics = {
+            "accuracy": accuracy_score(y_test, y_pred),
+            "precision": precision_score(y_test, y_pred),
+            "recall": recall_score(y_test, y_pred),
+            "auc": roc_auc_score(y_test, y_pred_proba)
         }
-        logger.debug('Model evaluation metrics calculated')
-        return metrics_dict
+
+        logger.info("Model evaluation completed")
+        return metrics
+
     except Exception as e:
-        logger.error('Error during model evaluation: %s', e)
+        logger.error(f"Evaluation failed: {e}")
         raise
 
-def save_metrics(metrics: dict, file_path: str) -> None:
-    """Save the evaluation metrics to a JSON file."""
+
+# -------------------- MLflow Logging --------------------
+def log_to_mlflow(model, metrics, test_df, root_path: Path):
     try:
-        with open(file_path, 'w') as file:
-            json.dump(metrics, file, indent=4)
-        logger.debug('Metrics saved to %s', file_path)
+        with mlflow.start_run() as run:
+
+            mlflow.set_tag("model", "Classification Model")
+
+            # log parameters
+            if hasattr(model, "get_params"):
+                mlflow.log_params(model.get_params())
+
+            # log metrics
+            for k, v in metrics.items():
+                mlflow.log_metric(k, v)
+
+            # # log input dataset
+            # test_input = mlflow.data.from_pandas(test_df, targets=TARGET)
+            # mlflow.log_input(test_input, context="testing")
+
+            # model signature
+            signature = mlflow.models.infer_signature(
+                model_input=test_df.iloc[:, :-1].sample(20, random_state=42),
+                model_output=model.predict(test_df.iloc[:, :-1].sample(20))
+            )
+
+            temp_path = root_path / "models" / "mlflow_model"
+
+            if os.path.exists(temp_path):
+                import shutil
+                shutil.rmtree(temp_path)
+
+            mlflow.sklearn.save_model(
+                sk_model=model,
+                path=temp_path,
+                signature=signature
+            )
+
+            mlflow.log_artifacts(temp_path, artifact_path="model")
+
+            # log original model
+            mlflow.log_artifact(root_path / "models" / "model.pkl")
+
+            artifact_uri = mlflow.get_artifact_uri()
+
+            logger.info("MLflow logging completed")
+            return run.info.run_id, artifact_uri
+
     except Exception as e:
-        logger.error('Error occurred while saving the metrics: %s', e)
+        logger.error(f"MLflow logging failed: {e}")
         raise
 
-def save_model_info(run_id: str, model_path: str, file_path: str) -> None:
-    """Save the model run ID and path to a JSON file."""
+
+# -------------------- Save Run Info --------------------
+def save_run_info(path: Path, run_id: str, artifact_uri: str):
     try:
-        model_info = {'run_id': run_id, 'model_path': model_path}
-        with open(file_path, 'w') as file:
-            json.dump(model_info, file, indent=4)
-        logger.debug('Model info saved to %s', file_path)
+        info = {
+            "run_id": run_id,
+            "artifact_path": artifact_uri,
+            "model_name": "model"
+        }
+
+        with open(path, "w") as f:
+            json.dump(info, f, indent=4)
+
+        logger.info("Run information saved")
+
     except Exception as e:
-        logger.error('Error occurred while saving the model info: %s', e)
+        logger.error(f"Error saving run info: {e}")
         raise
 
+
+# -------------------- Main Pipeline --------------------
 def main():
-    mlflow.set_experiment("dvc-pipeline")
-    with mlflow.start_run() as run:  # Start an MLflow run
-        try:
-            clf = load_model('./models/model.pkl')
-            test_data = load_data('./data/features/test_bow.csv')
-            
-            X_test = test_data.iloc[:, :-1].values
-            y_test = test_data.iloc[:, -1].values
+    try:
+        setup_mlflow()
 
-            metrics = evaluate_model(clf, X_test, y_test)
-            
-            save_metrics(metrics, 'reports/metrics.json')
-            
-            # Log metrics to MLflow
-            for metric_name, metric_value in metrics.items():
-                mlflow.log_metric(metric_name, metric_value)
-            
-            # Log model parameters to MLflow
-            if hasattr(clf, 'get_params'):
-                params = clf.get_params()
-                for param_name, param_value in params.items():
-                    mlflow.log_param(param_name, param_value)
-            
-            # Log model to MLflow
-            mlflow.sklearn.log_model(clf, "model")
-            
-            # Save model info
-            save_model_info(run.info.run_id, "model", 'reports/experiment_info.json')
-            
-            # Log the metrics file to MLflow
-            mlflow.log_artifact('reports/metrics.json')
+        root = Path(__file__).parent.parent.parent
 
-            # Log the model info file to MLflow
-            mlflow.log_artifact('reports/model_info.json')
+        test_path = root / "data" / "features" / "test_bow.csv"
+        model_path = root / "models" / "model.pkl"
 
-            # Log the evaluation errors log file to MLflow
-            mlflow.log_artifact('model_evaluation_errors.log')
-        except Exception as e:
-            logger.error('Failed to complete the model evaluation process: %s', e)
-            print(f"Error: {e}")
+        test_df = load_data(test_path)
 
-if __name__ == '__main__':
+        X_test, y_test = split_X_y(test_df)
+
+        model = load_model(model_path)
+
+        metrics = evaluate_model(model, X_test, y_test)
+
+        run_id, artifact_uri = log_to_mlflow(
+            model,
+            metrics,
+            test_df,
+            root
+        )
+
+        save_run_info(
+            root / "reports" / "experiment_info.json",
+            run_id,
+            artifact_uri
+        )
+
+    except Exception as e:
+        logger.critical(f"Evaluation pipeline failed: {e}")
+
+
+if __name__ == "__main__":
     main()
