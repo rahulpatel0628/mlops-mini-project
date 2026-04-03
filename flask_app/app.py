@@ -44,7 +44,7 @@ def home():
     return render_template('index.html')   
 
 @app.route('/predict',methods=['POST'])
-def predict():
+def predct():
 
     text = request.form['text']
     normalized_text = normalize_text(text)
