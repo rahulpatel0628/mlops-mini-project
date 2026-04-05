@@ -86,8 +86,6 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/emotiondetection:latest
-            docker stop emotiondetection || true
-            docker rm emotiondetection || true
             docker run -d -p 80:5000 --name emotiondetection \ 
             -e DAGSHUB_PAT=${{ secrets.DAGSHUB_PAT }} \
             ${{ secrets.DOCKERHUB_USERNAME }}/emotiondetection:latest
