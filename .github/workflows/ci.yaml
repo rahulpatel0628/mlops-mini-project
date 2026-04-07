@@ -79,3 +79,20 @@ jobs:
       - name: Push Docker image to ECR
         run: |
           docker push 065882629527.dkr.ecr.eu-north-1.amazonaws.com/emotioc_ecr:latest1
+
+      - name: Deploy to EC2
+        if: success()
+        uses: appleboy/ssh-action@v0.1.5
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY }}
+            aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_KEY }}
+            aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 065882629527.dkr.ecr.eu-north-1.amazonaws.com
+        
+            docker pull 065882629527.dkr.ecr.eu-north-1.amazonaws.com/emotioc_ecr:latest1
+            docker stop emotioc_app || true
+            docker rm emotioc_app || true
+            docker run -d -p 8000:5000 -e DAGSHUB_PAT=${{ secrets.DAGSHUB_PAT }} --name emotioc_app 065882629527.dkr.ecr.eu-north-1.amazonaws.com/emotioc_ecr:latest1
