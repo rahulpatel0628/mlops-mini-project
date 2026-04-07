@@ -90,6 +90,7 @@ jobs:
           script: |
             aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY }}
             aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_KEY }}
+            aws configure set aws_region eu-north-1
             aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 065882629527.dkr.ecr.eu-north-1.amazonaws.com
         
             docker pull 065882629527.dkr.ecr.eu-north-1.amazonaws.com/emotioc_ecr:latest1
